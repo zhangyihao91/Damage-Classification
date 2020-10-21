@@ -1,0 +1,33 @@
+data_loader, data_loader_test = load_det_dataset(mode=mode, 
+                                                 batch_size=batch_size, 
+                                                 num_workers=num_workers)
+num_classes = data_loader.dataset.nclass()
+total_steps = num_epochs*len(data_loader)
+
+# Dumps
+monitor   = Monitor(f"{mode}/NoPretrain_{maxlr}_{num_epochs}")
+model_dir = f"{model_dir}/{mode}/NoPretrain_{maxlr}_{num_epochs}"
+if not os.path.isdir(model_dir):
+    os.makedirs(model_dir);
+    
+# Model
+model  = get_model_detection(num_classes, model_name=model_name).to(device)
+for p in model.parameters():
+    p.requires_grad_(True)
+params = [p for p in model.parameters() if p.requires_grad]
+optimizer = torch.optim.SGD(params, lr=1,
+                            momentum=momentum, 
+                            weight_decay=weight_decay)
+lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=maxlr, total_steps=total_steps)
+print(f"Finetuning (faster rcnn) {len(params)} parameters out of {len(list(model.parameters()))}")
+
+
+
+print(f"Start training epoch {epoch} ...")
+train_epoch_linear(model, optimizer, data_loader, monitor, lr_scheduler=lr_scheduler)
+print("Start evaluation ...")
+tem = evaluate_coco(model, data_loader_test)
+monitor.update(get_coco_stat(tem))
+dt_eval, eval_data = evaluate(model, data_loader_test)
+monitor.update(eval_data)
+torch.save(model.state_dict(), f"{model_dir}/epoch_{epoch}")
